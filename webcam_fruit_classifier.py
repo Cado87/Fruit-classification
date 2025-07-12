@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow import keras
 import time
 import os
+import argparse
 
 class FruitClassifier:
     def __init__(self, model_path="models/fruit_recognition_model.keras"):
@@ -89,6 +90,93 @@ class FruitClassifier:
         
         return predicted_class, confidence
     
+    def classify_image(self, image_path, show_image=True, save_result=True):
+        """
+        Classify a single image file
+        
+        Args:
+            image_path (str): Path to the image file
+            show_image (bool): Whether to display the image with results
+            save_result (bool): Whether to save the result image
+        """
+        # Check if image file exists
+        if not os.path.exists(image_path):
+            print(f"Error: Image file not found at {image_path}")
+            return None, 0.0
+        
+        # Load image
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"Error: Could not load image from {image_path}")
+            return None, 0.0
+        
+        print(f"Processing image: {image_path}")
+        print(f"Image size: {image.shape[1]}x{image.shape[0]}")
+        
+        # Make prediction
+        predicted_class, confidence = self.predict(image)
+        
+        if predicted_class:
+            print(f"\n=== Classification Result ===")
+            print(f"Predicted fruit: {predicted_class}")
+            print(f"Confidence: {confidence:.2%}")
+            
+                    # Show top 3 predictions
+        if self.model is not None:
+            processed_image = self.preprocess_image(image)
+            predictions = self.model.predict(processed_image, verbose=0)
+            probabilities = tf.nn.softmax(predictions[0]).numpy()
+            
+            # Get top 3 predictions
+            top_3_idx = np.argsort(probabilities)[-3:][::-1]
+            print(f"\nTop 3 predictions:")
+            for i, idx in enumerate(top_3_idx):
+                print(f"{i+1}. {self.class_names[idx]}: {probabilities[idx]:.2%}")
+            
+            if show_image:
+                # Create display image with results
+                display_image = image.copy()
+                
+                # Add text overlay
+                text = f"{predicted_class}: {confidence:.2%}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)[0]
+                
+                # Position text at top of image
+                text_x = 20
+                text_y = 50
+                
+                # Draw background rectangle
+                cv2.rectangle(display_image, 
+                            (text_x - 10, text_y - text_size[1] - 10),
+                            (text_x + text_size[0] + 10, text_y + 10),
+                            (0, 0, 0), -1)
+                
+                # Draw text with color based on confidence
+                color = (0, 255, 0) if confidence > 0.8 else (0, 255, 255) if confidence > 0.6 else (0, 165, 255)
+                cv2.putText(display_image, text, (text_x, text_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+                
+                # Add instructions
+                cv2.putText(display_image, "Press any key to close", (20, display_image.shape[0] - 20), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                
+                # Show image
+                cv2.imshow('Fruit Classification Result', display_image)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+            
+            if save_result:
+                # Save result image
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                result_filename = f"result_{predicted_class}_{timestamp}.jpg"
+                cv2.imwrite(result_filename, image)
+                print(f"Result saved as: {result_filename}")
+            
+            return predicted_class, confidence
+        else:
+            print("Failed to make prediction.")
+            return None, 0.0
+
     def run_webcam(self, camera_index=0):
         """
         Run real-time fruit classification using webcam
@@ -200,8 +288,16 @@ class FruitClassifier:
 
 def main():
     """Main function to run the fruit classifier"""
-    print("=== Fruit Classification Webcam Application ===")
-    print("This application uses a trained Keras model to classify fruits in real-time.")
+    parser = argparse.ArgumentParser(description='Fruit Classification Application')
+    parser.add_argument('--image', '-i', type=str, help='Path to image file for classification')
+    parser.add_argument('--camera', '-c', type=int, default=0, help='Camera index for webcam mode (default: 0)')
+    parser.add_argument('--no-display', action='store_true', help='Do not display image when classifying file')
+    parser.add_argument('--no-save', action='store_true', help='Do not save result image when classifying file')
+    
+    args = parser.parse_args()
+    
+    print("=== Fruit Classification Application ===")
+    print("This application uses a trained Keras model to classify fruits.")
     print()
     
     # Initialize classifier
@@ -215,25 +311,34 @@ def main():
     print(f"Available classes: {', '.join(classifier.class_names)}")
     print()
     
-    # Ask user for camera selection
-    print("Camera options:")
-    print("0 - Default camera")
-    print("1 - External camera (if available)")
-    print("2 - USB camera (if available)")
-    
-    try:
-        camera_choice = input("Enter camera index (default: 0): ").strip()
-        camera_index = int(camera_choice) if camera_choice else 0
-    except ValueError:
-        camera_index = 0
-        print("Invalid input, using default camera (index 0)")
-    
-    print(f"Starting webcam with camera index {camera_index}...")
-    print("Press 'q' to quit, 's' to save current frame")
-    print()
-    
-    # Run webcam classification
-    classifier.run_webcam(camera_index)
+    if args.image:
+        # Image classification mode
+        print(f"Classifying image: {args.image}")
+        classifier.classify_image(
+            args.image, 
+            show_image=not args.no_display, 
+            save_result=not args.no_save
+        )
+    else:
+        # Webcam mode
+        print("Camera options:")
+        print("0 - Default camera")
+        print("1 - External camera (if available)")
+        print("2 - USB camera (if available)")
+        
+        try:
+            camera_choice = input(f"Enter camera index (default: {args.camera}): ").strip()
+            camera_index = int(camera_choice) if camera_choice else args.camera
+        except ValueError:
+            camera_index = args.camera
+            print(f"Invalid input, using camera index {camera_index}")
+        
+        print(f"Starting webcam with camera index {camera_index}...")
+        print("Press 'q' to quit, 's' to save current frame")
+        print()
+        
+        # Run webcam classification
+        classifier.run_webcam(camera_index)
 
 if __name__ == "__main__":
     main() 

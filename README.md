@@ -74,8 +74,18 @@ This application allows you to classify fruits in real-time using your computer'
    python webcam_fruit_classifier.py
    ```
 
+3. **Classify a single image:**
+   ```bash
+   python webcam_fruit_classifier.py --image path/to/your/image.jpg
+   ```
+   Or use the simplified wrapper:
+   ```bash
+   python classify_image.py path/to/your/image.jpg
+   ```
+
 ### How to Use
 
+#### Webcam Mode
 1. **Camera Selection:**
    - The application will prompt you to select a camera index
    - Usually `0` is the default camera
@@ -93,6 +103,28 @@ This application allows you to classify fruits in real-time using your computer'
 3. **Controls:**
    - Press `q` to quit the application
    - Press `s` to save the current frame as an image
+
+#### Image Classification Mode
+1. **Command Line Options:**
+   ```bash
+   # Basic image classification
+   python webcam_fruit_classifier.py --image fruit.jpg
+   
+   # Without displaying the image
+   python webcam_fruit_classifier.py --image fruit.jpg --no-display
+   
+   # Without saving the result
+   python webcam_fruit_classifier.py --image fruit.jpg --no-save
+   
+   # Using the simplified wrapper
+   python classify_image.py fruit.jpg
+   ```
+
+2. **Features:**
+   - Shows top 3 predictions with confidence scores
+   - Displays the image with classification result overlay
+   - Saves the result image with timestamp
+   - Supports common image formats (JPG, PNG, etc.)
 
 ### Tips for Best Results
 
@@ -139,9 +171,10 @@ This application allows you to classify fruits in real-time using your computer'
 fruit-classification/
 ├── models/
 │   └── fruit_recognition_model.keras    # Trained model
-├── webcam_fruit_classifier.py           # Main application
+├── webcam_fruit_classifier.py           # Main application (webcam + image)
+├── classify_image.py                    # Simple image classification wrapper
 ├── test_model.py                        # Model testing script
-└── README.md                           # Original project README
+└── README.md                           # This file
 ```
 
 ## Technical Details
