@@ -17,9 +17,9 @@ class FruitClassifier:
         self.model_path = model_path
         self.model = None
         self.class_names = [
-            'Apple', 'Banana', 'Cherry', 'Chico', 'Grape', 'Kiwi', 'Mango', 
-            'Orange', 'Papaya', 'Peach', 'Pear', 'Pineapple', 'Plum', 'Pomegranate',
-            'Strawberry', 'Tomato', 'Watermelon', 'Custard Apple', 'Guava', 'Muskmelon'
+            'Mango', 'Grape', 'Plum', 'Kiwi', 'Pear', 'Apple', 'Orange', 'Banana',
+            'Pomegranate', 'Strawberry', 'Pineapple', 'Fig', 'Peach', 'Apricot',
+            'Avocado', 'Summer Squash', 'Lemon', 'Lime', 'Guava', 'Raspberry'
         ]
         self.input_size = (128, 128)  # Model was trained with 128x128 input size
         self.load_model()
@@ -60,35 +60,32 @@ class FruitClassifier:
         
         return image_batch
     
-    def predict(self, image):
+    def predict(self, image, threshold=0.5):
         """
-        Predict fruit class from image
+        Predict fruit classes from image (multi-label)
         
         Args:
             image: OpenCV image (BGR format)
-            
+            threshold (float): Probability threshold for classifying a fruit as present
+        
         Returns:
-            tuple: (predicted_class, confidence_score)
+            tuple: (list of predicted classes, list of (class, probability) tuples)
         """
         if self.model is None:
-            return None, 0.0
+            return [], []
         
         # Preprocess image
         processed_image = self.preprocess_image(image)
         
         # Make prediction
         predictions = self.model.predict(processed_image, verbose=0)
+        probabilities = predictions[0]  # Already sigmoid, shape (20,)
         
-        # Apply softmax to get probabilities (since model output is not softmax)
-        probabilities = tf.nn.softmax(predictions[0]).numpy()
+        # Get all classes above threshold
+        predicted_classes = [self.class_names[i] for i, prob in enumerate(probabilities) if prob > threshold]
+        class_probs = [(self.class_names[i], float(prob)) for i, prob in enumerate(probabilities)]
         
-        # Get predicted class and confidence
-        predicted_class_idx = np.argmax(probabilities)
-        confidence = float(probabilities[predicted_class_idx])
-        
-        predicted_class = self.class_names[predicted_class_idx]
-        
-        return predicted_class, confidence
+        return predicted_classes, class_probs
     
     def classify_image(self, image_path, show_image=True, save_result=True):
         """
@@ -102,80 +99,72 @@ class FruitClassifier:
         # Check if image file exists
         if not os.path.exists(image_path):
             print(f"Error: Image file not found at {image_path}")
-            return None, 0.0
+            return [], []
         
         # Load image
         image = cv2.imread(image_path)
         if image is None:
             print(f"Error: Could not load image from {image_path}")
-            return None, 0.0
+            return [], []
         
         print(f"Processing image: {image_path}")
         print(f"Image size: {image.shape[1]}x{image.shape[0]}")
         
         # Make prediction
-        predicted_class, confidence = self.predict(image)
+        predicted_classes, class_probs = self.predict(image)
         
-        if predicted_class:
+        if predicted_classes:
             print(f"\n=== Classification Result ===")
-            print(f"Predicted fruit: {predicted_class}")
-            print(f"Confidence: {confidence:.2%}")
-            
-                    # Show top 3 predictions
-        if self.model is not None:
-            processed_image = self.preprocess_image(image)
-            predictions = self.model.predict(processed_image, verbose=0)
-            probabilities = tf.nn.softmax(predictions[0]).numpy()
-            
-            # Get top 3 predictions
-            top_3_idx = np.argsort(probabilities)[-3:][::-1]
-            print(f"\nTop 3 predictions:")
-            for i, idx in enumerate(top_3_idx):
-                print(f"{i+1}. {self.class_names[idx]}: {probabilities[idx]:.2%}")
-            
-            if show_image:
-                # Create display image with results
-                display_image = image.copy()
-                
-                # Add text overlay
-                text = f"{predicted_class}: {confidence:.2%}"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)[0]
-                
-                # Position text at top of image
-                text_x = 20
-                text_y = 50
-                
-                # Draw background rectangle
-                cv2.rectangle(display_image, 
-                            (text_x - 10, text_y - text_size[1] - 10),
-                            (text_x + text_size[0] + 10, text_y + 10),
-                            (0, 0, 0), -1)
-                
-                # Draw text with color based on confidence
-                color = (0, 255, 0) if confidence > 0.8 else (0, 255, 255) if confidence > 0.6 else (0, 165, 255)
-                cv2.putText(display_image, text, (text_x, text_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
-                
-                # Add instructions
-                cv2.putText(display_image, "Press any key to close", (20, display_image.shape[0] - 20), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                
-                # Show image
-                cv2.imshow('Fruit Classification Result', display_image)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-            
-            if save_result:
-                # Save result image
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                result_filename = f"result_{predicted_class}_{timestamp}.jpg"
-                cv2.imwrite(result_filename, image)
-                print(f"Result saved as: {result_filename}")
-            
-            return predicted_class, confidence
+            print(f"Predicted fruits: {', '.join(predicted_classes)}")
+            print("Probabilities:")
+            for cname, prob in class_probs:
+                print(f"  {cname}: {prob:.2%}")
         else:
-            print("Failed to make prediction.")
-            return None, 0.0
+            print("No fruit detected above threshold.")
+        
+        # Show top 3 predictions
+        top_3 = sorted(class_probs, key=lambda x: x[1], reverse=True)[:5]
+        print(f"\nTop 3 predictions:")
+        for i, (cname, prob) in enumerate(top_3):
+            print(f"{i+1}. {cname}: {prob:.2%}")
+        
+        if show_image:
+            # Create display image with results
+            display_image = image.copy()
+            
+            # Add text overlay for all predicted classes
+            y0 = 50
+            for idx, cname in enumerate(predicted_classes):
+                prob = dict(class_probs)[cname]
+                text = f"{cname}: {prob:.2%}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)[0]
+                text_x = 20
+                text_y = y0 + idx * (text_size[1] + 10)
+                cv2.rectangle(display_image, 
+                              (text_x - 10, text_y - text_size[1] - 10),
+                              (text_x + text_size[0] + 10, text_y + 10),
+                              (0, 0, 0), -1)
+                color = (0, 255, 0) if prob > 0.8 else (0, 255, 255) if prob > 0.6 else (0, 165, 255)
+                cv2.putText(display_image, text, (text_x, text_y), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+            
+            # Add instructions
+            cv2.putText(display_image, "Press any key to close", (20, display_image.shape[0] - 20), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Show image
+            cv2.imshow('Fruit Classification Result', display_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        
+        if save_result:
+            # Save result image
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            result_filename = f"result_{'_'.join(predicted_classes) if predicted_classes else 'None'}_{timestamp}.jpg"
+            cv2.imwrite(result_filename, image)
+            print(f"Result saved as: {result_filename}")
+        
+        return predicted_classes, class_probs
 
     def run_webcam(self, camera_index=0):
         """
@@ -229,28 +218,24 @@ class FruitClassifier:
             roi = frame[roi_y1:roi_y2, roi_x1:roi_x2]
             
             # Make prediction
-            predicted_class, confidence = self.predict(roi)
+            predicted_classes, class_probs = self.predict(roi)
             
             # Display prediction results
-            if predicted_class and confidence > 0.1:  # Only show if confidence > 50%
-                # Create background for text
-                text = f"{predicted_class}: {confidence:.2f}"
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-                
-                # Position text at top of frame
-                text_x = 10
-                text_y = 30
-                
-                # Draw background rectangle
-                cv2.rectangle(display_frame, 
-                            (text_x - 5, text_y - text_size[1] - 5),
-                            (text_x + text_size[0] + 5, text_y + 5),
-                            (0, 0, 0), -1)
-                
-                # Draw text
-                color = (0, 255, 0) if confidence > 0.8 else (0, 255, 255) if confidence > 0.6 else (0, 165, 255)
-                cv2.putText(display_frame, text, (text_x, text_y), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            if predicted_classes:
+                y0 = 30
+                for idx, cname in enumerate(predicted_classes):
+                    prob = dict(class_probs)[cname]
+                    text = f"{cname}: {prob:.2f}"
+                    text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+                    text_x = 10
+                    text_y = y0 + idx * (text_size[1] + 10)
+                    cv2.rectangle(display_frame, 
+                                  (text_x - 5, text_y - text_size[1] - 5),
+                                  (text_x + text_size[0] + 5, text_y + 5),
+                                  (0, 0, 0), -1)
+                    color = (0, 255, 0) if prob > 0.8 else (0, 255, 255) if prob > 0.6 else (0, 165, 255)
+                    cv2.putText(display_frame, text, (text_x, text_y), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             
             # Calculate and display FPS
             frame_count += 1

@@ -33,7 +33,7 @@ This application allows you to classify fruits in real-time using your computer'
 ## Features
 
 - **Real-time fruit classification** using webcam
-- **9 fruit classes**: Kiwi, Watermelon, Apple, Sugerapple, Grapes, Orange, Banana, Mango, Pineapple
+- **20 fruit classes**: 'Mango', 'Grape', 'Plum', 'Kiwi', 'Pear', 'Apple', 'Orange', 'Banana', 'Pomegranate', 'Strawberry', 'Pineapple', 'Fig', 'Peach', 'Apricot', 'Avocado', 'Summer Squash', 'Lemon', 'Lime', 'Guava', 'Raspberry'
 - **Confidence scoring** with color-coded results
 - **FPS display** for performance monitoring
 - **Image capture** functionality to save frames
