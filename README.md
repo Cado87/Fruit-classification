@@ -209,3 +209,18 @@ Feel free to modify the code for your specific needs:
 ## License
 
 This project is part of the fruit classification research. Please refer to the original project documentation for licensing information.
+
+
+## To run script webcam_fruit_classifier_pytorch
+
+Activate conda environment:
+conda activate fruit-classification
+
+# Webcam mode
+python webcam_fruit_classifier_pytorch.py
+
+# Image classification mode
+python webcam_fruit_classifier_pytorch.py --image path/to/image.jpg
+
+# With options
+python webcam_fruit_classifier_pytorch.py --image path/to/image.jpg --no-display --no-save
