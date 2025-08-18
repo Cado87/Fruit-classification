@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 import time
 import os
 import argparse
+import json
 
 class FruitClassifierPyTorch:
     def __init__(self, model_path="models/fruit_classifier_model.pth"):
@@ -28,32 +29,8 @@ class FruitClassifierPyTorch:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet stats
         ])
         
-        # Note: Since we don't have the exact class names from the dataset,
-        # we'll use generic class names. You may need to adjust these based on your dataset
-        self.class_names = [
-            'Class_0', 'Class_1', 'Class_2', 'Class_3', 'Class_4', 'Class_5', 'Class_6', 'Class_7',
-            'Class_8', 'Class_9', 'Class_10', 'Class_11', 'Class_12', 'Class_13', 'Class_14',
-            'Class_15', 'Class_16', 'Class_17', 'Class_18', 'Class_19', 'Class_20', 'Class_21',
-            'Class_22', 'Class_23', 'Class_24', 'Class_25', 'Class_26', 'Class_27', 'Class_28',
-            'Class_29', 'Class_30', 'Class_31', 'Class_32', 'Class_33', 'Class_34', 'Class_35',
-            'Class_36', 'Class_37', 'Class_38', 'Class_39', 'Class_40', 'Class_41', 'Class_42',
-            'Class_43', 'Class_44', 'Class_45', 'Class_46', 'Class_47', 'Class_48', 'Class_49',
-            'Class_50', 'Class_51', 'Class_52', 'Class_53', 'Class_54', 'Class_55', 'Class_56',
-            'Class_57', 'Class_58', 'Class_59', 'Class_60', 'Class_61', 'Class_62', 'Class_63',
-            'Class_64', 'Class_65', 'Class_66', 'Class_67', 'Class_68', 'Class_69', 'Class_70',
-            'Class_71', 'Class_72', 'Class_73', 'Class_74', 'Class_75', 'Class_76', 'Class_77',
-            'Class_78', 'Class_79', 'Class_80', 'Class_81', 'Class_82', 'Class_83', 'Class_84',
-            'Class_85', 'Class_86', 'Class_87', 'Class_88', 'Class_89', 'Class_90', 'Class_91',
-            'Class_92', 'Class_93', 'Class_94', 'Class_95', 'Class_96', 'Class_97', 'Class_98',
-            'Class_99', 'Class_100', 'Class_101', 'Class_102', 'Class_103', 'Class_104', 'Class_105',
-            'Class_106', 'Class_107', 'Class_108', 'Class_109', 'Class_110', 'Class_111', 'Class_112',
-            'Class_113', 'Class_114', 'Class_115', 'Class_116', 'Class_117', 'Class_118', 'Class_119',
-            'Class_120', 'Class_121', 'Class_122', 'Class_123', 'Class_124', 'Class_125', 'Class_126',
-            'Class_127', 'Class_128', 'Class_129', 'Class_130', 'Class_131', 'Class_132', 'Class_133',
-            'Class_134', 'Class_135', 'Class_136', 'Class_137', 'Class_138', 'Class_139', 'Class_140',
-            'Class_141', 'Class_142', 'Class_143', 'Class_144', 'Class_145', 'Class_146', 'Class_147',
-            'Class_148', 'Class_149'
-        ]
+        # Try to load class names from file if available; otherwise infer later from the model
+        self.class_names = self._load_class_names_from_file() or []
         
         self.load_model()
         
@@ -62,18 +39,58 @@ class FruitClassifierPyTorch:
         try:
             print(f"Loading model from {self.model_path}...")
             
+            # Load checkpoint/state dict first to infer expected number of classes
+            checkpoint = torch.load(self.model_path, map_location=self.device)
+            state_dict = None
+            if isinstance(checkpoint, dict):
+                # Common nesting patterns
+                for candidate_key in ["state_dict", "model_state_dict", "model"]:
+                    if candidate_key in checkpoint and isinstance(checkpoint[candidate_key], dict):
+                        state_dict = checkpoint[candidate_key]
+                        break
+                if state_dict is None:
+                    state_dict = checkpoint
+            else:
+                state_dict = checkpoint
+
+            # Try to detect the expected out_features from fc.weight in the state dict
+            expected_num_classes = None
+            fc_weight_key = None
+            for key in state_dict.keys():
+                if key.endswith("fc.weight") or key.endswith("module.fc.weight"):
+                    fc_weight_key = key
+            if fc_weight_key is not None:
+                expected_num_classes = state_dict[fc_weight_key].shape[0]
+
             # Create the model architecture (ResNet-18)
             self.model = models.resnet18(pretrained=False)
-            
-            # Get the number of classes from the class_names list
-            num_classes = len(self.class_names)
-            
-            # Replace the final layer to match the number of classes
+
+            # Determine final layer size
+            if expected_num_classes is None:
+                # Fallback to provided class names length or default to 165 if unknown
+                expected_num_classes = len(self.class_names) if self.class_names else 165
+
+            # Ensure class_names length matches expected_num_classes
+            if not self.class_names:
+                # No names available; generate placeholders
+                self.class_names = [f"Class_{i}" for i in range(expected_num_classes)]
+            elif len(self.class_names) != expected_num_classes:
+                # Reconcile mismatch by truncating or padding with placeholders
+                original_len = len(self.class_names)
+                if original_len > expected_num_classes:
+                    self.class_names = self.class_names[:expected_num_classes]
+                else:
+                    self.class_names.extend([f"Class_{i}" for i in range(original_len, expected_num_classes)])
+                print(f"Warning: Adjusted class_names length from {original_len} to {expected_num_classes} to match model outputs.")
+
+            # Replace the final layer to match the expected number of classes
             num_ftrs = self.model.fc.in_features
-            self.model.fc = nn.Linear(num_ftrs, num_classes)
-            
-            # Load the saved state dictionary
-            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+            self.model.fc = nn.Linear(num_ftrs, expected_num_classes)
+
+            # Load the saved state dictionary (allow non-critical mismatches)
+            missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
+            if missing or unexpected:
+                print(f"Warning: load_state_dict with non-strict mode. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
             
             # Set model to evaluation mode and move to device
             self.model.eval()
@@ -87,6 +104,28 @@ class FruitClassifierPyTorch:
             print("Please make sure the model file exists and is compatible.")
             return False
         return True
+    
+    def _load_class_names_from_file(self):
+        """Attempt to load class names from a JSON or TXT file in the models directory."""
+        try:
+            base_dir = os.path.dirname(self.model_path)
+            # JSON format: ["apple", "banana", ...]
+            json_path = os.path.join(base_dir, "class_names.json")
+            if os.path.exists(json_path):
+                with open(json_path, "r", encoding="utf-8") as f:
+                    names = json.load(f)
+                if isinstance(names, list) and all(isinstance(n, str) for n in names):
+                    return names
+            # TXT format: one class name per line
+            txt_path = os.path.join(base_dir, "class_names.txt")
+            if os.path.exists(txt_path):
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    names = [line.strip() for line in f if line.strip()]
+                if names:
+                    return names
+        except Exception as e:
+            print(f"Warning: Failed to load class names from file: {e}")
+        return None
     
     def preprocess_image(self, image):
         """
