@@ -382,7 +382,9 @@ def main():
         return
     
     print("Model loaded successfully!")
-    print(f"Number of classes: {len(classifier.class_names)}")
+    print(f"Classes ({len(classifier.class_names)}):")
+    for idx, name in enumerate(classifier.class_names):
+        print(f"  {idx}: {name}")
     print()
     
     if args.image:
